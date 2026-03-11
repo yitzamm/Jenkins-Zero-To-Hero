@@ -114,8 +114,9 @@ GitHub hook trigger for GITScm polling
 
 Other nice enhancements could be:
 
+- SonarQube Quality Gate Notifications such as Slack or email
+- Add unit or integration tests, and/or implement container security scanning
 - Implement Ingress + NGINX instead of NodePort
-- Add Helm charts for Kubernetes deployments
 - Introduce automated rollback strategies
 - Add monitoring with Prometheus and Grafana
-- Add unit or integration tests, and/or implement container security scanning
+- Add Helm charts for Kubernetes deployments
