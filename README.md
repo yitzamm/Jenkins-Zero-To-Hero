@@ -1,136 +1,121 @@
-# Jenkins-Zero-To-Hero
+# Jenkins CI/CD Pipeline (SonarQube, Docker, ArgoCD and Kubernetes)
 
-Are you looking forward to learn Jenkins right from Zero(installation) to Hero(Build end to end pipelines)? then you are at the right place. 
+March 11, 2026
 
-## Installation on EC2 Instance
+This project demonstrates an end-to-end CI/CD and GitOps workflow for deploying a Spring Boot application using Jenkins, SonarQube, Docker, ArgoCD, and Kubernetes.
 
-YouTube Video ->
-https://www.youtube.com/watch?v=zZfhAXfBvVA&list=RDCMUCnnQ3ybuyFdzvgv2Ky5jnAA&index=1
+The pipeline automatically builds the application, performs static code analysis, packages the application into a Docker image, pushes the image to Docker Hub, updates the Kubernetes deployment manifest, and allows ArgoCD to synchronize the change into a Kubernetes cluster.
 
+The infrastructure combines cloud and local environments:
 
-![Screenshot 2023-02-01 at 5 46 14 PM](https://user-images.githubusercontent.com/43399466/216040281-6c8b89c3-8c22-4620-ad1c-8edd78eb31ae.png)
+- **AWS EC2** hosts Jenkins and SonarQube for CI and code analysis.
+- **Minikube** (local Kubernetes cluster) runs the application workloads.
+- **ArgoCD** continuously monitors the Git repository and deploys updates to Kubernetes.
 
-Install Jenkins, configure Docker as agent, set up cicd, deploy applications to k8s and much more.
+This architecture follows a GitOps model, where the Kubernetes cluster state is driven by version-controlled manifests stored in Git.
 
-## AWS EC2 Instance
+Link to Jenkins Implementation by Abhishek Veeramalla: https://www.youtube.com/watch?v=JGQI5pkK82w
 
-- Go to AWS Console
-- Instances(running)
-- Launch instances
+## Architecture Diagram
 
-<img width="994" alt="Screenshot 2023-02-01 at 12 37 45 PM" src="https://user-images.githubusercontent.com/43399466/215974891-196abfe9-ace0-407b-abd2-adcffe218e3f.png">
+<img width="1032" height="364" alt="Jenkins CI-CD project" src="https://github.com/user-attachments/assets/2b0abfa7-162b-4907-9c6c-8afe31dd9678" />
 
-### Install Jenkins.
+## Key Technologies
 
-Pre-Requisites:
- - Java (JDK)
+- **CI/CD -** Jenkins Pipeline, Docker Agent
+- **Code Quality -** SonarQube, Maven Sonar Scanner
+- **Containerization -** Docker Hub Image Registry
+- **Kubernetes & GitOps -** Minikube, ArgoCD, ArgoCD Operator, Kubernetes Deployments and Services
+- **Cloud & Infrastructure -** AWS EC2, Linux (Ubuntu)
+- **Build Tools -** Maven, Spring Boot
 
-### Run the below commands to install Java and Jenkins
+## Pipeline Workflow
 
-Install Java
-
+**1. Build and Test**
+The Spring Boot project is compiled and packaged using Maven. This generates the application JAR file.
 ```
-sudo apt update
-sudo apt install openjdk-17-jre
-```
-
-Verify Java is Installed
-
-```
-java -version
+mvn clean package
 ```
 
-Now, you can proceed with installing Jenkins
+<img width="1015" height="137" alt="image" src="https://github.com/user-attachments/assets/6d5f247b-e7aa-4eea-a9d4-fca80753cdfa" />
 
+**2. Static Code Analysis**
+The pipeline sends the project to SonarQube for static code analysis. SonarQube evaluates code quality, detects vulnerabilities, and provides metrics on technical debt.
 ```
-curl -fsSL https://pkg.jenkins.io/debian/jenkins.io-2023.key | sudo tee \
-  /usr/share/keyrings/jenkins-keyring.asc > /dev/null
-echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
-  https://pkg.jenkins.io/debian binary/ | sudo tee \
-  /etc/apt/sources.list.d/jenkins.list > /dev/null
-sudo apt-get update
-sudo apt-get install jenkins
+mvn sonar:sonar
 ```
 
-**Note: ** By default, Jenkins will not be accessible to the external world due to the inbound traffic restriction by AWS. Open port 8080 in the inbound traffic rules as show below.
+<img width="994" height="224" alt="image" src="https://github.com/user-attachments/assets/e52868c3-7adf-42ce-81a2-d42236c0dfc6" />
 
-- EC2 > Instances > Click on <Instance-ID>
-- In the bottom tabs -> Click on Security
-- Security groups
-- Add inbound traffic rules as shown in the image (you can just allow TCP 8080 as well, in my case, I allowed `All traffic`).
-
-<img width="1187" alt="Screenshot 2023-02-01 at 12 42 01 PM" src="https://user-images.githubusercontent.com/43399466/215975712-2fc569cb-9d76-49b4-9345-d8b62187aa22.png">
-
-
-### Login to Jenkins using the below URL:
-
-http://<ec2-instance-public-ip-address>:8080    [You can get the ec2-instance-public-ip-address from your AWS EC2 console page]
-
-Note: If you are not interested in allowing `All Traffic` to your EC2 instance
-      1. Delete the inbound traffic rule for your instance
-      2. Edit the inbound traffic rule to only allow custom TCP port `8080`
-  
-After you login to Jenkins, 
-      - Run the command to copy the Jenkins Admin Password - `sudo cat /var/lib/jenkins/secrets/initialAdminPassword`
-      - Enter the Administrator password
-      
-<img width="1291" alt="Screenshot 2023-02-01 at 10 56 25 AM" src="https://user-images.githubusercontent.com/43399466/215959008-3ebca431-1f14-4d81-9f12-6bb232bfbee3.png">
-
-### Click on Install suggested plugins
-
-<img width="1291" alt="Screenshot 2023-02-01 at 10 58 40 AM" src="https://user-images.githubusercontent.com/43399466/215959294-047eadef-7e64-4795-bd3b-b1efb0375988.png">
-
-Wait for the Jenkins to Install suggested plugins
-
-<img width="1291" alt="Screenshot 2023-02-01 at 10 59 31 AM" src="https://user-images.githubusercontent.com/43399466/215959398-344b5721-28ec-47a5-8908-b698e435608d.png">
-
-Create First Admin User or Skip the step [If you want to use this Jenkins instance for future use-cases as well, better to create admin user]
-
-<img width="990" alt="Screenshot 2023-02-01 at 11 02 09 AM" src="https://user-images.githubusercontent.com/43399466/215959757-403246c8-e739-4103-9265-6bdab418013e.png">
-
-Jenkins Installation is Successful. You can now starting using the Jenkins 
-
-<img width="990" alt="Screenshot 2023-02-01 at 11 14 13 AM" src="https://user-images.githubusercontent.com/43399466/215961440-3f13f82b-61a2-4117-88bc-0da265a67fa7.png">
-
-## Install the Docker Pipeline plugin in Jenkins:
-
-   - Log in to Jenkins.
-   - Go to Manage Jenkins > Manage Plugins.
-   - In the Available tab, search for "Docker Pipeline".
-   - Select the plugin and click the Install button.
-   - Restart Jenkins after the plugin is installed.
-   
-<img width="1392" alt="Screenshot 2023-02-01 at 12 17 02 PM" src="https://user-images.githubusercontent.com/43399466/215973898-7c366525-15db-4876-bd71-49522ecb267d.png">
-
-Wait for the Jenkins to be restarted.
-
-
-## Docker Slave Configuration
-
-Run the below command to Install Docker
-
+**3. Build Docker Image**
+The packaged application is containerized using a Dockerfile. Each Jenkins build generates a uniquely tagged image.
 ```
-sudo apt update
-sudo apt install docker.io
-```
- 
-### Grant Jenkins user and Ubuntu user permission to docker deamon.
-
-```
-sudo su - 
-usermod -aG docker jenkins
-usermod -aG docker ubuntu
-systemctl restart docker
+yitzamm/jenkins-pipeline:<build-number>
 ```
 
-Once you are done with the above steps, it is better to restart Jenkins.
+**4. Push Image to Docker Hub**
+The pipeline authenticates with Docker Hub and pushes the image to the registry. This allows Kubernetes clusters to pull the image for deployment.
 
+<img width="922" height="228" alt="image" src="https://github.com/user-attachments/assets/d6f0a57c-d490-4b24-b918-14c041901fd9" />
+
+**5. Update Kubernetes Deployment Manifest**
+Jenkins updates the Kubernetes deployment file by replacing a placeholder tag with the new build number. Before pipeline:
 ```
-http://<ec2-instance-public-ip>:8080/restart
+image: yitzamm/jenkins-pipeline:replaceImageTag
+```
+After:
+```
+image: yitzamm/jenkins-pipeline:4
 ```
 
-The docker agent configuration is now successful.
+**6. ArgoCD GitOps Deployment**
+ArgoCD continuously monitors the Git repository. When it detects the manifest update:
 
+- ArgoCD pulls the updated manifest
+- Compares desired vs actual cluster state
+- Deploys the updated container image to Kubernetes
 
+<img width="1496" height="508" alt="image" src="https://github.com/user-attachments/assets/f74364d9-8ce6-49bc-9eca-aff41fd79fc0" />
 
+**7. Kubernetes Deployment**
+The application runs in Kubernetes pods managed by a Deployment controller.
+```
+replicas: 2
+```
+Kubernetes ensures:
 
+- High availability
+- Self-healing pods
+- Load balancing across replicas
+
+<img width="992" height="344" alt="image" src="https://github.com/user-attachments/assets/9f9863e6-6679-4207-bbc4-d83fa2a08c58" />
+
+The application is exposed using a NodePort service.
+```
+spring-boot-app-service   NodePort   80:32382/TCP
+```
+
+<img width="1908" height="554" alt="image" src="https://github.com/user-attachments/assets/3eba3f4b-05e4-4907-a309-a368167d449e" />
+
+## Suggested Improvement: Automatic Pipeline Trigger
+A recommended improvement would be configuring GitHub Webhooks so Jenkins automatically triggers the pipeline whenever changes are pushed to the repository. To enable it we would need to:
+
+1. Configure a GitHub Webhook pointing to the Jenkins server:
+```
+http://<jenkins-server>/github-webhook/
+```
+
+2. In Jenkins pipeline configuration, enable:
+```
+GitHub hook trigger for GITScm polling
+```
+
+3. Ensure Jenkins is reachable from GitHub (public IP or reverse proxy).
+
+Other nice enhancements could be:
+
+- Implement Ingress + NGINX instead of NodePort
+- Add Helm charts for Kubernetes deployments
+- Introduce automated rollback strategies
+- Add monitoring with Prometheus and Grafana
+- Add unit or integration tests, and/or implement container security scanning
