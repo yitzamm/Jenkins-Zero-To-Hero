@@ -1,0 +1,288 @@
+Jenkins End-to-End Implementation / CICD Project
+
+AWS EC2
+
+Create an EC2 instance for the project
+
+CLONE THE REPO LOCALLY
+
+WSL
+git --version
+mkdir projects
+cd projects/
+git clone https://github.com/yitzamm/Jenkins-Zero-To-Hero.git
+cd Jenkins-Zero-To-Hero
+ls
+cd java-maven-sonar-argocd-helm-k8s
+ls
+cd spring-boot-app
+ls
+
+INSTALL MAVEN
+
+sudo apt install maven
+mvn clean package
+
+BUILD THE DOCKER IMAGE
+
+docker build -t jenkins-pipeline .
+docker run -d -p 8010:8080 -t jenkins-pipeline
+ssh -i ~/ssh-key-pair.pem ubuntu@3.89.191.188
+sudo hostnamectl set-hostname cicd-pipeline
+/bin/bash
+
+INSTALL JENKINS
+
+Jenkins Installation Guide: https://www.jenkins.io/doc/book/installing/linux/#debianubuntu
+
+Java:
+sudo apt update
+sudo apt install fontconfig openjdk-21-jre (jdk 21 would be for Jenkins)
+java -version
+
+Jenkins LTS:
+sudo wget -O /etc/apt/keyrings/jenkins-keyring.asc \
+  https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc]" \
+  https://pkg.jenkins.io/debian-stable binary/ | sudo tee \
+  /etc/apt/sources.list.d/jenkins.list > /dev/null
+sudo apt update
+sudo apt install Jenkins
+ps -ef | grep jenkins
+
+SET-UP JENKINS
+
+Open port 8080 from the EC2 instance
+Get Jenkins' access key: sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+
+CREATE A PIPELINE
+
+Under the Pipeline section, select "Pipeline script from SCM" to import the pipeline configuration directly from the repo. SCM > Git, and for the Script Path enter the exact path for the Jenkinsfile.
+NOTE: The Jenkinsfile as well as the Dockerfile reside inside the application folder.
+
+INSTALL REQUIRED PLUGINS
+
+Jenkins > Plugins > Available Plugins:
+
+- Docker Pipeline
+- SonarQube Scanner
+
+CONFIGURE SONAR SERVER LOCALLY
+
+System Requirements
+Java 17+ (Oracle JDK, OpenJDK, or AdoptOpenJDK)
+Hardware Recommendations:
+   Minimum 2 GB RAM
+   2 CPU cores
+
+WSL (remote into the EC2 instance):
+sudo su -
+adduser sonarqube
+sudo su - sonarqube
+
+NOTE: Difference between adduser and useradd? The adduser command is interactive and user-friendly, useful for manual user creation. The useradd command is good for automation, scripts and containers. 
+
+wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-9.9.4.87374.zip
+logout
+apt install openjdk-17-jdk (jdk17 would be for SonarQube)
+update-java-alternatives --list
+apt install unzip
+sudo su - sonarqube
+unzip *
+
+CHECK DIR OWNERSHIP (grant permissions if needed)
+
+ls -ld ~/sonarqube-9.9.4.87374
+chmod -R 755 /home/sonarqube/sonarqube-9.9.4.87374
+chown -R sonarqube:sonarqube /home/sonarqube/sonarqube-9.9.4.87374
+
+TELL SONARQUBE TO USE JDK17 (2 jdk versions are running in the same instance)
+
+echo 'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64' >> /home/sonarqube/.bashrc
+echo 'export PATH=$JAVA_HOME/bin:$PATH' >> /home/sonarqube/.bashrc
+
+Reload and check:
+source /home/sonarqube/.bashrc
+java -version
+
+START SONARQUBE
+
+cd sonarqube-9.9.4.87374/bin/linux-x86-64
+./sonar.sh start
+./sonar.sh status
+./sonar.sh console (start server and print logs)
+logout
+
+CREATE A GLOBAL TOKEN FROM SONARQUBE
+
+>> sqa_eafa06754017df8c10f267e02f7d990851627e0b
+save for later
+
+CREATE A GLOBAL SECRET TEXT FROM JENKINS
+
+>> Save SonarQube's token
+
+INSTALL DOCKER (Docker Slave Configuration)
+
+sudo apt install docker.io
+
+GRANT JENKINS AND UBUNTU USERS PERMISSIONS TO THE DOCKER DEAMON
+
+usermod -aG docker jenkins
+usermod -aG docker ubuntu
+systemctl restart docker
+
+NOTE: This would allow the specified users to run and manage Docker containers.
+
+http://3.89.191.188:8080/restart -> Restart Jenkins
+
+RUN A MINIKUBE CLUSTER LOCALLY
+
+MiniKube Installation Guide: https://minikube.sigs.k8s.io/docs/start/?arch=%2Flinux%2Fx86-64%2Fstable%2Fbinary+download
+
+WSL:
+curl -LO https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
+sudo install minikube-linux-amd64 /usr/local/bin/minikube && rm minikube-linux-amd64
+minikube start
+
+CREATE THE ARGOCD OPERATOR
+
+Documentation guide: https://operatorhub.io/operator/argocd-operator
+
+NOTE: Kubernetes operators handle the lifecycle of Kubernetes controllers.
+
+Install Operator LifeCycle Manager (OLM):
+
+curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.41.0/install.sh | bash -s v0.41.0
+
+NOTE: This tool helps manage the Operators running on your cluster
+
+Install the operator:
+
+kubectl create -f https://operatorhub.io/install/argocd-operator.yaml
+
+NOTE: This Operator will be installed in the "operators" namespace and will be usable from all namespaces in the cluster.
+
+Verification command: kubectl get csv -n operators
+
+What a Controller is (in Kubernetes)
+
+A controller is a program that constantly watches the cluster and makes sure the actual state matches the desired state. Examples of built-in controllers:
+
+Deployment controller → manages pods
+ReplicaSet controller → ensures number of pods
+Node controller → watches nodes
+Job controller → runs batch jobs
+
+So a controller is basically a Kubernetes automation loop.
+
+What is an operator?
+
+An Operator is a special type of controller designed to manage complex applications. Instead of just managing pods, it manages entire systems like:
+
+PostgreSQL
+Prometheus
+ArgoCD
+Redis
+Kafka
+
+An operator knows how to run and maintain the app automatically.
+
+Why Operators are recommended?
+
+Without operators, installing a complex system requires many manual steps.
+Important concept: Operators are controllers, but they are controllers specialized for apps.
+
+Other common operators:
+Prometheus Operator → installs monitoring stack
+ArgoCD Operator → installs GitOps platform
+Elastic Operator → installs Elasticsearch
+MongoDB Operator → manages Mongo clusters
+
+JENKINSFILE
+
+Stage = Build and Test
+
+On this stage we're cding to the location where the pom.xml file lives. This file contains the dependencies required to run the app. Once there, mvn would download the dependencies, help build the application and generate the artifact (.jar file).
+
+Stage = Static Code Analysis
+
+On this stage we're running mvn sonar:sonar using the application path. The mvn sonar:sonar is a mvn target just as mvn clean package.
+
+TOKENS, SECRETS AND OTHER CREDENTIALS
+
+JENKINS:
+- Create a username and password credential for Docker
+- Create a secret file for your GitHub's token
+- Create a secret file for your SonarQube's token (already created)
+
+CHECK THE MINIKUBE STATUS
+
+WSL local:
+>> minikube status
+
+minikube
+type: Control Plane
+host: Running
+kubelet: Running
+apiserver: Running
+kubeconfig: Configured
+
+CREATE THE ARGOCD CONTROLLER
+
+WSL local:
+vim argocd.yml
+
+apiVersion: argoproj.io/v1beta1
+kind: ArgoCD
+metadata:
+  name: example-argocd
+  labels:
+    example: basic
+spec: {}
+:wq
+
+cat argocd.yml
+kubectl apply -f argocd.yml
+kubectl get pods
+kubectl get svc
+kubectl edit svc example-argocd-server
+>> Change the type: ClusterIP spec to type: NodePort, save and quit (:wq)
+
+ERROR: ArgoCD is changing the service back to type: ClusterIP.
+FIX: Update the ArgoCD CR instead of the service.
+
+kubectl edit argocd example-argocd
+>> Go to spec > server > service > type: "" and change it to NodePort, save and quit (:wq)
+
+kubectl get svc
+minikube service example-argocd-server
+minikube service list
+
+ACCESS ARGOCD
+
+kubectl get secrets
+kubectl edit secret example-argocd-cluster
+echo admin_pwd | base64 -d
+
+CREATE AN ARGO APPLICATION
+
+Application Name: test
+Project Name: default
+Source: github_repo_URL
+Revision: HEAD
+Path: path to the artifact deployment.yml file
+Cluster URL: https://kubernetes.default.svc (default)
+Namespace: default
+Keep the remaining values the same
+
+UPDATE THE ARTIFACT'S DEPLOYMENT FILE
+
+spec:
+      containers:
+      - name: spring-boot-app
+        image: yitzamm/jenkins-pipeline:replaceImageTag
+        ports:
+        - containerPort: 8080
+
+Build the pipeline to update the replaceImageTag for the actual image tag. Check the DockerHub to verify the image was successfully uploaded. 
