@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
       - name: spring-boot-app
-        image: yitzamm/jenkins-pipeline:replaceImageTag
+        image: yitzamm/jenkins-pipeline:4
         ports:
         - containerPort: 8080
